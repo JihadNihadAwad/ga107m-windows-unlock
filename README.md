@@ -1,145 +1,94 @@
-# Windows GPU UNLOCK
+# GA107M Windows GPU Unlock (RTX 3050 Ti Laptop)
 
-**English** | [한국어](README.ko.md)
+**English only** | Upstream: [impacifist/Windows-GPU-UNLOCK](https://github.com/impacifist/Windows-GPU-UNLOCK) (RTX 3090 FE) — this repository is a fork carrying a port to a laptop GPU.
 
-Experimental UEFI unlock and direct Windows handoff for one documented **RTX 3090
-Founders Edition / ASUS BIOS 3057** system. **v0.3.1 is a source-only pre-release**:
-build the internal EFI for your own partition GUIDs. Firmware assets and private,
-partition-specific EFI binaries are not bundled with this release.
+Experimental UEFI unlock and direct Windows handoff for one documented
+**HP RTX 3050 Ti Laptop GPU (GA107M)** system, plus a **read-only preflight**
+and a **decode probe** for collecting the values needed to pin your own card.
+Source-only, as upstream: no firmware assets or built EFI binaries are
+bundled.
 
-On October 24, 2026, the system completed an internal **headless unlock** with all
-monitors on the RTX: one active RTX GOP before release, zero physical GOPs afterward,
-one automatic unlock transaction, and Windows display recovery. Subsequent Windows
-measurements reached **FP16 124.97 / BF16 128.93 TFLOPS** (three-run medians).
-[Evidence and limitations](evidence/headless-handoff/README.md).
+**Hardware result (this machine, 2026-10-25):** the full transaction executed
+twice from UEFI before the Windows driver bound — FWSEC clean, V67 staged,
+`SS0=0x88888888` written and verified pre- and post-FLR, clean handoff — and
+with the dGPU kept out of runtime D3cold, Windows measured:
 
-v0.3.1 fixes preflight rejection when firmware exposes more than two RTX display
-children. The rebuilt wrapper completed automatic unlock and Windows handoff on
-the same system; no new performance benchmark was run for this build.
-
-This is one machine and boot, not general RTX 3090 support. The Ryzen 7 7800X3D
-**has an iGPU**; the experiment used no active AMD GOP. CPUs without an iGPU,
-Intel hosts, other cards and other BIOS versions remain unverified.
-Read [compatibility](docs/COMPATIBILITY.en.md) first.
-
-## Choose the correct boot path
-
-| Path | Display and input | Instructions |
+| 8192³ GEMM (clock-normalized) | Locked | Unlocked |
 |---|---|---|
-| **Internal headless** | Monitors on RTX; display temporarily removed; no T/U/Enter | [Headless guide](docs/HEADLESS.en.md): one actual unlock + Windows handoff verified |
-| Internal AMD-display manual / Auto | Motherboard/iGPU display preserved; manual variant requires U | [Existing internal guide](docs/INTERNAL-BOOT.en.md) |
-| Legacy USB manual | AMD/iGPU display; U once, then Boot Override to Windows without reset | [USB guide](docs/GUIDE.en.md) |
+| FP16 in / FP32 acc | 513 ops/SM/clk (16.7 TFLOPS @ 1657 MHz, 59 W) | **987 ops/SM/clk (25.8 TFLOPS @ 1305 MHz, 48.5 W)** |
+| BF16 in / FP32 acc | 507 ops/SM/clk | **962 ops/SM/clk** |
+| TF32 in / FP32 acc | 252 ops/SM/clk | unchanged (SS1 preserved by default policy) |
 
-**Headless USB boot has not been tested.** The legacy USB EFI still requires its AMD
-display profile. BIOS priority `USB → Windows` alone does not implement direct handoff.
+~55% more measured TFLOPS at ~20% lower power for FP16 GEMM. TF32 doubling is
+an explicit opt-in (`entryLatchedSs1Full`), unverified on this card.
 
-## Internal headless quick start
+**Persistence is not automatic on a laptop.** Windows runtime-D3cold
+power-gates the idle dGPU, and the card's fuse-based init re-programs the
+selectors at every power-on (entry SS0 differs each cold boot). The override
+survives exactly as long as the dGPU never enters D3cold; `hold_gpu_windowed.py`
+keeps a live CUDA context for that. See
+[docs/GA107M-PERSISTENCE.en.md](docs/GA107M-PERSISTENCE.en.md).
 
-Read the [full guide and recovery procedure](docs/HEADLESS.en.md) before changing
-boot settings. Use the exact supported hardware, Secure Boot disabled, a fully
-decrypted Windows C: with BitLocker protection off, and a connected keyboard.
-The tools do not disable encryption.
+One machine, one card, evidence first. Nothing here authorizes running this
+on any other laptop. Read [docs/GA107M.en.md](docs/GA107M.en.md) (the port's
+phase-by-phase workflow) and upstream's [compatibility](docs/COMPATIBILITY.en.md)
+notes first.
 
-Preserve the **existing Windows ESP and recovery partition**. Prepare a separate
-GPT FAT32 **EFI System Partition of at least 1 GiB**, with a letter such as U:.
-Tools do not create, shrink, delete or format partitions. An ordinary FAT32 data
-partition alone is not the required ESP.
-
-You need Python 3.9+, clang/lld-link **20.1.8**, the pinned repository dependencies
-and five locally obtained [firmware assets](docs/ASSETS.en.md).
-Host integration tests additionally need MSVC/Windows SDK and private fixtures.
-
-From an administrator PowerShell in the repository root:
-
-```powershell
-# Replace the GUID and tool paths with your own values.
-.\internal-boot\Configure.ps1 -UnlockDriveLetter U `
-  -WindowsEspGuid 'YOUR-WINDOWS-ESP-GUID'
-.\research\headless\build-unlock.ps1 `
-  -Clang 'C:\TOOLS\LLVM20\bin\clang.exe' `
-  -LldLink 'C:\TOOLS\LLVM20\bin\lld-link.exe'
-
-# Stage and append a separate F8 test entry; retain existing boot priority.
-.\internal-boot\Headless.ps1 -Assets '.\assets' -Register
-```
-
-Without an action switch, `Headless.ps1 -Assets '.\assets'` only stages files.
-Configuration and build do not register a boot entry.
-
-1. Save work and fully power off. On the tested ASUS firmware, select
-   **F8 → GPU Headless UNLOCK - EXPERIMENTAL**.
-2. **Wait without T, U or Enter.** Initial Esc within five seconds skips release
-   and unlock and boots Windows directly.
-3. The screen becomes black while the RTX GOP is removed. The child attempts
-   once and the wrapper starts Windows directly. Do not reset between unlock and
-   Windows. Confirm display recovery and [measure](docs/BENCHMARK.en.md).
-4. Only after that F8 test succeeds, enable default automatic boot:
-
-   ```powershell
-   .\internal-boot\Headless.ps1 -EnableAutomatic -ConfirmedSuccess
-   ```
-
-That explicit action places headless first and Windows Boot Manager second and
-disables Windows Fast Startup. Test registration alone does not. Publishing this
-release does not change the research PC's current default boot selection.
-
-**The two Esc windows differ:** initial wrapper Esc boots Windows without release;
-the later three-second child Esc window is after release and cancels into a stop.
-It does not restore the display or continue to Windows. On failure or if Windows
-does not return, fully power off and choose **F8 → Windows Boot Manager**.
-
-```powershell
-.\internal-boot\Headless.ps1 -RestoreWindowsFirst
-```
-
-Windows-first recovery is independent of experimental EFI/build artifacts and
-still works without saved state. Restoring the prior Fast Startup setting needs
-that state; retain it and backups. [Recovery details](docs/HEADLESS.en.md#recovery).
-
-## Results and limits
-
-The successful child reported SS0 `0x88888888`, SS1 `0x8`, BME disabled, zero
-remaining mappings, completed cleanup and one FLR. The wrapper verified the released
-topology before Windows entry. Windows display recovery was observed by the operator.
-
-| CUDA 12.6 / cuBLAS 12.6, 4096 × 4096 | Three-run median |
-|---|---:|
-| FP32 pedantic | 22.85 TFLOPS |
-| FP16 Tensor / FP32 accumulation | 124.97 TFLOPS |
-| BF16 Tensor / FP32 accumulation | 128.93 TFLOPS |
-
-There is **no contemporary controlled locked baseline** for this headless boot,
-so these values do not establish an unlock percentage. They do not establish game
-or ComfyUI gains, long-term stability, sleep/hibernate resume or repeated automatic
-cold-boot reliability. [Sanitized measurements](evidence/headless-handoff/summary.json)
-and [earlier results](docs/RESULTS.en.md) describe separate experiments.
-
-## Implementation and boundaries
-
-Headless is a separate compile-time profile. Exact GPU/PROM/PCI state, firmware
-driver code, ownership, cold state, immutable selectors and cleanup checks remain.
-The child logs to files only and rejects physical GOP reappearance or changed
-console/input interfaces. Ordinary builds retain their AMD display guards.
-Do not remove checks or substitute a PROM hash to force another machine through.
+## What is in this fork
 
 | Path | Purpose |
 |---|---|
-| `internal-boot/`, `research/headless/` | Internal/headless source, local build, installation and host tests |
-| `unlock/`, `release/` | Preserved legacy USB manual implementation and historical artifacts |
-| `benchmark/`, `evidence/` | Measurement tools and selected public evidence |
-| `docs/` | Compatibility, assets, boot guides and limitations |
+| `unlock/` | The EFI application sources; three build modes (below) |
+| `unlock/vendor/` | Vendored transaction core (GA107 laptop-FWSEC fix ported in) |
+| `tools/ga107m-parse-preflight.py` | Turns a probe REPORT.TXT into exact-card pins |
+| `unlock/tests/test_vbios_dmem.c` | Live-geometry regression for the FWSEC DMEM round-up |
+| `unlock/run-cross-tests.sh` + `.ps1` | Cross-host test runner (WSL clang builds, Windows runs) |
+| `docs/GA107M.en.md` | Port workflow: preflight → probe → profile → experimental |
+| `docs/GA107M-PERSISTENCE.en.md` | D3cold persistence analysis with source-dive receipts |
+| `hold_gpu_windowed.py`, `setup-hold-startup.ps1` | Visible, easy-to-quit GPU hold |
 
-No VBIOS flashing or Windows driver replacement is part of the procedure.
-Driver 617.14 was unchanged in the documented run. Host mock tests do not add hardware
-support. New systems require [compatibility reporting](docs/CONTRIBUTING.en.md) and
-[portability validation](docs/PORTABILITY.en.md).
+### Build modes (`unlock/build-wsl.sh`, or upstream `build.ps1` with LLVM)
 
-## License and attribution
+| Mode | What it does | Writes |
+|---|---|---|
+| `GA107M-PREFLIGHT` | PCI/config/BAR0/GOP inventory | **None** |
+| `GA107M-PROBE` | Inventory + cold registers, real PROM + FWSEC parse for profile transcription | One config write: the PCI MEM decode bit (the same write the driver makes every boot) |
+| `GA107M-EXPERIMENTAL-entryLatchedSs1Preserve` | Exact-card unlock; manual `U` confirmation; one transaction per boot | The transaction itself |
 
-The port and reused core are **GPL-2.0-only**; EDK2 and separately attributed
-components retain their licenses. Based on
-[rough2515-hub/rtx3080-unlock-public](https://github.com/rough2515-hub/rtx3080-unlock-public/tree/a08254d269af30ace9e57237abd3d8e6c261e8f5)
-and [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock/tree/0ebdb1c6308b6a2072be5bf04513472942541956).
-Preserve [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md) and
-[change history](CHANGES.md). NVIDIA firmware, PROM/BIOS images, drivers and CUDA
-DLLs are not redistributed in this source release.
+The experimental build **fails closed** (`#error`) until the exact-card
+profile pins are transcribed from your own probe report. All upstream
+fail-closed gates, one-shot confirmation, containment and halt behavior are
+retained. No VBIOS/eFuse write path exists in any build.
+
+### Workflow
+
+1. Build + boot the preflight (read-only) — sanity and report layout.
+2. Build + boot the probe — collect cold registers, PROM hash, FWSEC
+   descriptor. Run `tools/ga107m-parse-preflight.py` on the report.
+3. Transcribe the emitted pins into `unlock/port.h`.
+4. Run the cross-host test suite including the full-transaction mock against
+   **your** PROM capture.
+5. Build + boot the experimental unlock; press `U` at the prompt
+   (Esc or 30 s cancels). Windows boots with the override applied.
+6. Hold the dGPU awake at logon to keep it; measure with a
+   clock-normalized GEMM benchmark (ops/SM/clk), not raw TFLOPS.
+
+Firmware assets are not redistributed; generate them from pinned upstream
+inputs ([docs/ASSETS.en.md](docs/ASSETS.en.md)).
+
+## Attribution and lineage
+
+GPL-2.0-only. This fork is based on
+[impacifist/Windows-GPU-UNLOCK](https://github.com/impacifist/Windows-GPU-UNLOCK),
+which is based on
+[rough2515-hub/rtx3080-unlock-public](https://github.com/rough2515-hub/rtx3080-unlock-public)
+and [Zagitta/gpu-unlock](https://github.com/Zagitta/gpu-unlock). The GA107
+laptop-FWSEC DMEM fix and GA107 firmware-path facts are from
+[IHaBiS02/ga107-unlock](https://github.com/IHaBiS02/ga107-unlock) (Linux kmod
+port for an LG RTX 3050). NVIDIA firmware remains under its own terms.
+
+## License
+
+GPL-2.0-only; EDK2 and separately attributed components retain their
+licenses. See [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+and [CHANGES.md](CHANGES.md).
