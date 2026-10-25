@@ -53,8 +53,8 @@ issue rate reads locked (512-class) by the time CUDA runs in Windows.
 
 ## Experiment matrix
 
-1. HOLD test (cheap): unlock boot -> immediately start `hold_gpu.py` at
-   logon -> run `bench_locked.py` while held. If 1024-class: the unlock
+1. HOLD test (cheap): unlock boot -> immediately start `tools/hold_gpu_windowed.py`
+   at logon -> run `tools/bench_gemm.py` while held. If 1024-class: the unlock
    survives driver bind and only D3cold clears it -> persistence = keep
    the GPU awake (autostart hold). If 512-class: the card parked before
    the hold started (ambiguous) or the loss is elsewhere.

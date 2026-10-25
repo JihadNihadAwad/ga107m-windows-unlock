@@ -1,5 +1,23 @@
 # 외부 코드 고지
 
+## GA107M laptop port (this fork) — 2026-10-25
+
+The GA107M (RTX 3050 Ti Laptop) port adds: exact-card pins for one HP
+laptop (transcribed from its own decode-probe report), the cold
+decode-off target handling, the `EnableDecode` step (driver-equivalent
+PCI MEM-decode config write), the GOP console-mirror classification for
+hybrid laptops, the read-only DECODE PROBE build mode, and the
+cross-host test runner. The laptop-specific FWSEC DMEM round-up fix
+(`gpu_unlock_fwsec_dmem_transfer`, 256-byte transfer rounding with image
+bounds checks) originates from
+[IHaBiS02/ga107-unlock](https://github.com/IHaBiS02/ga107-unlock)
+(GPL-2.0-only, `kernel/gpu_unlock/vbios_610.c` in that repository, ported
+from their 0.1.1 incident fix for a live-measured `0x980`-byte DMEM
+image); GA107 firmware-path facts (GA102 Booter/GSP selection for GA107
+in the pinned 610.43.03 HAL) were cross-checked against that project's
+analysis. No code was copied from NVIDIA's proprietary drivers; the
+open-kernel-module source was only read for the persistence analysis.
+
 ## 2026-10-23 내부 부팅 확장
 
 `internal-boot/`는 기존 GPL-2.0-only 포트의 별도 실험 확장입니다. 새 콘솔/드라이버

@@ -2,6 +2,17 @@
 
 **English** | [한국어](COMPATIBILITY.ko.md)
 
+> **This fork (GA107M laptop port):** the hardware-verified case is an
+> **HP RTX 3050 Ti Laptop GPU (GA107M)**, `10de:25a0` / subsystem `103c:88e5`,
+> 4 GiB, VBIOS `94.07.3a.00.6e`, Intel Iris Xe display, driver 617.14, with
+> two clean UEFI transactions and measured results in
+> [GA107M.en.md](GA107M.en.md). The RTX 3090 tables below are the upstream
+> project's separate verified case, preserved unchanged. Everything the
+> checks enforce for this fork's card is transcribed in `unlock/port.h`
+> (fails closed with `#error` until a card's own probe report provides the
+> pins); see the [GA107M workflow](GA107M.en.md) for what was actually
+> validated and what was not.
+
 The current implementation checks more than a model name. v0.3.0 records one
 successful internal headless boot on the same machine used for the earlier
 AMD-display trials. It does not make other RTX 3090s or platforms supported.
