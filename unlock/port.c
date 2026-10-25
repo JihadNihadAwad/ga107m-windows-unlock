@@ -75,7 +75,7 @@ EFI_STATUS GuDmaAllocate(UINTN N, VOID **C, UINT64 *D) {
   EFI_STATUS Status; GU_DMA *Entry; UINTN Mapped;
   if(!C || !D)return EFI_INVALID_PARAMETER;
   *C=NULL;*D=0;
-  if(GU_PREFLIGHT_ONLY || !Gu.profile_verified || !Gu.armed || !Gu.display_ok || !N || N>(128U<<20) || Gu.fault || Gu.retained || !Gu.pci || !Gu.owned)return EFI_INVALID_PARAMETER;
+  if(!GU_MMIO_WRITE_ALLOWED || !Gu.profile_verified || !Gu.armed || !Gu.display_ok || !N || N>(128U<<20) || Gu.fault || Gu.retained || !Gu.pci || !Gu.owned)return EFI_INVALID_PARAMETER;
   Entry=GuAlloc(sizeof(*Entry));if(!Entry)return EFI_OUT_OF_RESOURCES;
   Entry->pages=(N+4095)/4096;Entry->bytes=Entry->pages*4096;
   Status=Gu.pci->AllocateBuffer(Gu.pci,AllocateAnyPages,EfiBootServicesData,
@@ -132,7 +132,7 @@ VOID GuWrite32(UINT32 O, UINT32 V) {
 #ifdef GU_ENTRY_LATCHED_SS1_PRESERVE
   if(O==0x823820){Gu.fault=TRUE;return;}
 #endif
-  if(GU_PREFLIGHT_ONLY || !Gu.profile_verified || !Gu.pci || !Gu.armed || !Gu.owned || !Gu.display_ok || (O&3) ||
+  if(!GU_MMIO_WRITE_ALLOWED || !Gu.profile_verified || !Gu.pci || !Gu.armed || !Gu.owned || !Gu.display_ok || (O&3) ||
       (UINT64)O+4>Gu.bar_size) {Gu.fault=TRUE;return;}
 #ifdef GU_ENTRY_LATCHED_SS1_FULL
   if(O==0x823820 && (V!=0x8U || SelectorPhase!=GU_SELECTOR_PHASE_SS1_WRITE || Ss1WriteConsumed)) {
@@ -156,7 +156,13 @@ EFI_STATUS GuConfigRead(EFI_PCI_IO_PROTOCOL_WIDTH W, UINT32 O, VOID *V) {
 EFI_STATUS GuConfigWrite(EFI_PCI_IO_PROTOCOL_WIDTH W, UINT32 O, VOID *V) {
   EFI_STATUS Status;
   if(Gu.fault)return EFI_DEVICE_ERROR;
-  if(GU_PREFLIGHT_ONLY || !Gu.profile_verified || !Gu.pci || !Gu.owned || !Gu.armed || !Gu.display_ok || W>EfiPciIoWidthUint32 ||
+#if GU_PROBE_MODE
+  /* Probe builds allow exactly one config write: the EnableDecode MEM bit,
+     performed by app.c through its own guarded path. Everything else stays
+     locked, so refuse any vendor-core config write here. */
+  Gu.fault=TRUE;return EFI_ACCESS_DENIED;
+#endif
+  if(!GU_MMIO_WRITE_ALLOWED || !Gu.profile_verified || !Gu.pci || !Gu.owned || !Gu.armed || !Gu.display_ok || W>EfiPciIoWidthUint32 ||
      O>256-((UINT32)1<<W)) {Gu.fault=TRUE;return EFI_ACCESS_DENIED;}
   Status=Gu.pci->Pci.Write(Gu.pci,W,O,1,V);
   if(EFI_ERROR(Status))Gu.fault=TRUE;return Status;
@@ -213,8 +219,7 @@ fail:
 EFI_STATUS GuClearMaster(VOID) {
   UINT32 Id=0;UINT16 Command=0xffff,Now=0xffff;EFI_STATUS Status;
   EFI_STATUS AttributeStatus=EFI_SUCCESS;UINT64 Attributes=~0ULL;
-  if(GU_PREFLIGHT_ONLY)return EFI_ACCESS_DENIED;
-  /* Containment remains permitted after a latched I/O failure. */
+  /* Containment is always read/restore-only; allowed in every build. */
   Status=RawRead(EfiPciIoWidthUint32,0,&Id);
   if(EFI_ERROR(Status) || Id!=GU_BOARD_ID)goto fail;
   if(Gu.master_attributes_pending) {
@@ -272,7 +277,7 @@ EFI_STATUS GuSavePci(VOID) {
 EFI_STATUS GuFlr(VOID) {
   UINT32 Identity=0,Capability=0;UINT16 Command=0xffff,Pending=0xffff,Ctl=0;
   UINTN Wait;EFI_STATUS ResetStatus;
-  if(GU_PREFLIGHT_ONLY || !Gu.profile_verified || !Gu.saved || Gu.flrs || Gu.fault || !Gu.owned || !Gu.armed || !Gu.display_ok)return EFI_NOT_READY;
+  if(!GU_MMIO_WRITE_ALLOWED || !Gu.profile_verified || !Gu.saved || Gu.flrs || Gu.fault || !Gu.owned || !Gu.armed || !Gu.display_ok)return EFI_NOT_READY;
   if(EFI_ERROR(GuConfigRead(EfiPciIoWidthUint32,0,&Identity)) || Identity!=GU_BOARD_ID ||
      EFI_ERROR(GuConfigRead(EfiPciIoWidthUint16,4,&Command)) || Command==0xffff ||
      (Command&4) || !(Command&2) ||

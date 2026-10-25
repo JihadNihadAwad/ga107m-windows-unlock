@@ -145,23 +145,51 @@ int main(void) {
   Gu.fault=Gu.retained=FALSE;assert(!EFI_ERROR(GuDmaFree(cpu,dma)));
   setup();GuWrite32(0x82381c,0x88888888);
   fake.mem_fail=1;GuWrite32(0x823820,8);assert(Gu.fault);
-  fake.mem_fail=0;GuWrite32(0x823820,8);assert(fake.writes==2 && registers[0x823820/4]==0);
+  fake.mem_fail=0;
+  /* The entry-latched preserve policy refuses every SS1 write outright;
+   * upstream's host-write variant asserted the old always-write path. */
+#ifdef GU_ENTRY_LATCHED_SS1_PRESERVE
+  assert(fake.writes==1 && registers[0x823820/4]==0);
+#else
+  GuWrite32(0x823820,8);assert(fake.writes==2 && registers[0x823820/4]==0);
+#endif
   setup();GuWrite32(0x1000000,1);assert(Gu.fault && !fake.writes);
   setup();Gu.armed=FALSE;GuWrite32(0,1);assert(!fake.writes && Gu.fault);
   setup();fake.mem_fail=1;assert(GuRead32(0)==0xffffffffU && Gu.fault);
-  setup();assert(!EFI_ERROR(GuSavePci()));UINT32 saved[64];memcpy(saved,config,sizeof(saved));
+  setup(); /* reset fault: FLR tests need a clean, non-faulted state */
+  /* FLR's selector hold path reads SS0/SS1 live and compares against the
+   * entry latch and the written target. Latch realistic entry selectors
+   * (the latch refuses 0x88888888 as an entry value), then pre-stage the
+   * register with the post-write value the real transaction would hold. */
+  Gu.prom_verified=TRUE;
+#ifdef GU_ENTRY_LATCHED
+  assert(GuLatchEntrySelectors(0x46254040U,7));
+  registers[0x82381c/4]=0x88888888; /* post-write SS0 value */
+  registers[0x823820/4]=7;          /* preserved SS1 == latched entry */
+#else
+  (void)0;
+#endif
+  assert(!EFI_ERROR(GuSavePci()));UINT32 saved[64];memcpy(saved,config,sizeof(saved));
   assert(!EFI_ERROR(GuFlr()) && fake.flr_seen && !fake.config_too_early && Gu.flrs==1);
   assert(!EFI_ERROR(GuRestorePci()));
   assert(!memcmp(config+0x10,(UINT8 *)saved+0x10,24) && !(config[4]&4) && (config[4]&2));
   assert(*(UINT16 *)(config+0x80)==0x2930);
   assert(EFI_ERROR(GuFlr()) && Gu.flrs==1);
-  setup();assert(!EFI_ERROR(GuSavePci()));fake.lost_after_flr=1;
+#ifdef GU_ENTRY_LATCHED
+#define FLR_SETUP() do { setup();Gu.prom_verified=TRUE; \
+    GuLatchEntrySelectors(0x46254040U,7); \
+    registers[0x82381c/4]=0x88888888; \
+    registers[0x823820/4]=7; } while(0)
+#else
+#define FLR_SETUP() do { setup(); } while(0)
+#endif
+  FLR_SETUP();assert(!EFI_ERROR(GuSavePci()));fake.lost_after_flr=1;
   assert(EFI_ERROR(GuFlr()) && fake.delay>=100000 && !fake.config_too_early);
-  setup();assert(!EFI_ERROR(GuSavePci()));fake.flr_write_error=1;
+  FLR_SETUP();assert(!EFI_ERROR(GuSavePci()));fake.flr_write_error=1;
   assert(EFI_ERROR(GuFlr()) && fake.flr_seen && fake.delay>=100000);
   assert(!GuSafeToReturn());assert(!EFI_ERROR(GuClearMaster()) && !fake.config_too_early);
-  setup();assert(!EFI_ERROR(GuSavePci()));config[4]|=4;assert(EFI_ERROR(GuFlr()) && !fake.flr_seen);
-  setup();assert(!EFI_ERROR(GuSavePci()));config[0x82]|=0x20;assert(EFI_ERROR(GuFlr()) && !fake.flr_seen && fake.delay==1000000);
+  FLR_SETUP();assert(!EFI_ERROR(GuSavePci()));config[4]|=4;assert(EFI_ERROR(GuFlr()) && !fake.flr_seen);
+  FLR_SETUP();assert(!EFI_ERROR(GuSavePci()));config[0x82]|=0x20;assert(EFI_ERROR(GuFlr()) && !fake.flr_seen && fake.delay==1000000);
   setup();config[4]|=4;Gu.fault=TRUE;
   assert(!EFI_ERROR(GuClearMaster()) && !(config[4]&4));
   puts("UEFI adapter targeting, DMA ownership, I/O faults and FLR containment: PASS");

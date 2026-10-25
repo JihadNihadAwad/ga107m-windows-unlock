@@ -312,9 +312,9 @@ static EFI_STATUS EFIAPI file_open(EFI_FILE_PROTOCOL *f,EFI_FILE_PROTOCOL **out,
   FILE_FAKE *v=(FILE_FAKE *)f;char path[128];narrow(path,sizeof(path),name);CHECK(v->open);*out=NULL;
   int target=-1;
 #if defined(GU_EXPERIMENTAL_3090)
-  if(v->kind==0 && !strcmp(path,"\\RTX3090-UNLOCK"))target=1;
+  if(v->kind==0 && !strcmp(path,"\\GA107M-UNLOCK"))target=1;
 #else
-  if(v->kind==0 && !strcmp(path,"\\RTX3090-PREFLIGHT"))target=1;
+  if(v->kind==0 && !strcmp(path,"\\GA107M-PREFLIGHT"))target=1;
 #endif
   else if(v->kind==1 && !strncmp(path,"RUN",3)) {
     CHECK(!strcmp(path,"RUN00") || !strcmp(path,"RUN01") || !strcmp(path,"RUN02"));

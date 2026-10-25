@@ -72,9 +72,11 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
   if(EFI_ERROR(status) || !fs)return EFI_UNSUPPORTED;
   status=fs->OpenVolume(fs,&Root);if(EFI_ERROR(status) || !Root)return EFI_DEVICE_ERROR;
 #if defined(GU_EXPERIMENTAL_3090)
-  status=Root->Open(Root,&Parent,L"\\RTX3090-UNLOCK",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+  status=Root->Open(Root,&Parent,L"\\GA107M-UNLOCK",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+#elif defined(GU_PROBE_DECODE)
+  status=Root->Open(Root,&Parent,L"\\GA107M-PROBE",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #else
-  status=Root->Open(Root,&Parent,L"\\RTX3090-PREFLIGHT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
+  status=Root->Open(Root,&Parent,L"\\GA107M-PREFLIGHT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE,0);
 #endif
   if(EFI_ERROR(status) || !Parent)return EFI_NOT_FOUND;
   status=Metadata(Parent,TRUE,0);if(EFI_ERROR(status))return status;
@@ -95,9 +97,11 @@ EFI_STATUS GuIoOpen(EFI_HANDLE Image,EFI_SYSTEM_TABLE *St) {
     status=Run->Open(Run,&Report,L"REPORT.TXT",EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
     if(EFI_ERROR(status) || !Report)return EFI_DEVICE_ERROR;
 #if defined(GU_EXPERIMENTAL_3090)
-    GuLog("RTX3090 AMD EXPERIMENTAL MANUAL UNLOCK\nRUN%02u\nManual U starts one hardware transaction; Esc or timeout cancels. Hardware success unverified.\n",(unsigned)slot);
+    GuLog("GA107M RTX 3050 Ti EXPERIMENTAL MANUAL UNLOCK\nRUN%02u\nManual U starts one hardware transaction; Esc or timeout cancels. Hardware success unverified.\n",(unsigned)slot);
+#elif defined(GU_PROBE_DECODE)
+    GuLog("GA107M RTX 3050 Ti DECODE PROBE (read-only after one MEM-decode config write)\nRUN%02u\nEnables the PCI MEM decode bit only (the same write the driver performs each boot), reads cold registers and PROM, then returns.\n",(unsigned)slot);
 #else
-    GuLog("RTX3090 AMD read-only cold-state preflight\nRUN%02u\nCannot arm: GPU writes, DMA, reset and driver release are blocked.\n",(unsigned)slot);
+    GuLog("GA107M RTX 3050 Ti read-only inventory preflight\nRUN%02u\nCannot arm: GPU writes, DMA, reset and driver release are blocked.\n",(unsigned)slot);
 #endif
     return GuLogReady()?EFI_SUCCESS:EFI_DEVICE_ERROR;
   }
@@ -130,6 +134,20 @@ EFI_STATUS GuLoadAssets(VOID) {
 VOID GuReleaseAssets(VOID) {
   if(!GuSafeToReturn())return;
   for(UINTN i=0;i<5;i++){GuFree((VOID *)GuAssets[i].firmware.data);memset(&GuAssets[i],0,sizeof(GuAssets[i]));}
+}
+EFI_STATUS GuFileDumpInRun(const CHAR16 *Name,const char *Label,VOID *Data,UINTN Bytes) {
+  /* Inventory build helper: write a read-only capture (PROM dump) into this RUN. */
+  if(!Run || !Data || !Bytes || !Name || !Label)return EFI_INVALID_PARAMETER;
+  EFI_FILE_PROTOCOL *file=NULL;
+  EFI_STATUS status=Run->Open(Run,&file,(CHAR16 *)Name,EFI_FILE_MODE_READ|EFI_FILE_MODE_WRITE|EFI_FILE_MODE_CREATE,0);
+  if(EFI_ERROR(status) || !file){GuLog("dump open failed: %s status=%#llx\n",Label,(unsigned long long)status);return EFI_ERROR(status)?status:EFI_DEVICE_ERROR;}
+  UINTN written=Bytes;
+  status=file->Write(file,&written,Data);
+  if(!EFI_ERROR(status) && written!=Bytes)status=EFI_DEVICE_ERROR;
+  if(!EFI_ERROR(status))status=file->Flush(file);
+  file->Close(file);
+  GuLog("dump %s: bytes=%zu status=%#llx\n",Label,(size_t)Bytes,(unsigned long long)status);
+  return status;
 }
 EFI_STATUS GuIoClose(VOID) {
   EFI_FILE_PROTOCOL **files[]={&Report,&Run,&Parent,&Root};EFI_STATUS result=EFI_SUCCESS;

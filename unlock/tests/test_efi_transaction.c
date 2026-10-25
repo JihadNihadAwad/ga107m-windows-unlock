@@ -132,16 +132,26 @@ static VOID check_fwsec_image(void) {
 #ifdef GU_EXPERIMENTAL_3090
   struct gpu_unlock_fwsec fw;UINT32 sig_at;
   CHECK(!gpu_unlock_vbios_fwsec(prom,sizeof(prom),&fw));
-  CHECK(fw.image_off==0x4239c && fw.image_size==0xde00 && fw.dmem_size==sizeof(gsp_dmem));
+  /* Data-driven FWSEC geometry: accept the fixture ROM's own descriptor and
+     verify the transaction staged exactly those bytes. Known captures:
+     RTX 3090 (0x4239c/0xde00) and GA107M 3050 Ti (0x2ce64/0xea00) both have
+     dmem_size 0x800 = sizeof(gsp_dmem). */
+  CHECK(fw.image_off && fw.image_off<sizeof(prom) && fw.image_size>fw.data_off &&
+        fw.image_size<=0x10000 && fw.dmem_size==sizeof(gsp_dmem));
+  UINT32 dmem_transfer=0;
+  CHECK(!gpu_unlock_fwsec_dmem_transfer(&fw,&dmem_transfer) &&
+        fw.data_off+dmem_transfer<=fw.image_size);
   CHECK(!gpu_unlock_fwsec_sig_offset(fw.sig_versions,2,384,&sig_at));
   UINT64 last_source=((UINT64)registers[(GSP+0x110)/4]<<8)|((UINT64)registers[(GSP+0x128)/4]<<40);
   UINT8 *image=dma_pointer(last_source-fw.data_off,fw.image_size);
-  CHECK(!memcmp(gsp_dmem,image+fw.data_off,sizeof(gsp_dmem)));
+  CHECK(!memcmp(gsp_dmem,image+fw.data_off,dmem_transfer));
   CHECK(!memcmp(gsp_dmem+fw.pkc_off,prom+fw.sig_off+sig_at,384));
-  UINT8 expected[0xde00];memcpy(expected,prom+fw.image_off,sizeof(expected));
+  static UINT8 expected[0x10000];
+  CHECK(fw.image_size<=sizeof(expected));
+  memcpy(expected,prom+fw.image_off,fw.image_size);
   CHECK(!gpu_unlock_fwsec_patch_frts(expected,&fw,0x5ffe00000ULL));
   memcpy(expected+fw.data_off+fw.pkc_off,prom+fw.sig_off+sig_at,384);
-  CHECK(!memcmp(gsp_dmem,expected+fw.data_off,sizeof(gsp_dmem)));
+  CHECK(!memcmp(gsp_dmem,expected+fw.data_off,dmem_transfer));
 #else
   UINT64 last_source=((UINT64)registers[(GSP+0x110)/4]<<8)|((UINT64)registers[(GSP+0x128)/4]<<40);
   CHECK(last_source>=0xdf00);UINT8 *image=dma_pointer(last_source-0xdf00,0xe700);

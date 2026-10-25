@@ -217,17 +217,21 @@ static void TestPinnedFile(const char *Path, const char *Expected)
 
 int main(int Argc, char **Argv)
 {
-    if (Argc != 2 && Argc != 3) {
-        fprintf(stderr, "usage: %s [gsp_ga10x.bin] PROM.BIN\n", Argv[0]);
+    if (Argc < 2 || Argc > 4) {
+        fprintf(stderr, "usage: %s [gsp_ga10x.bin] [PROM.BIN [expected_prom_sha256]]\n", Argv[0]);
         return 2;
     }
     TestNistVectors();
     TestPaddingAndBinaryInput();
     TestHashMatching();
-    if (Argc == 3) TestPinnedFile(Argv[1],
+    if (Argc >= 3) TestPinnedFile(Argv[1],
         "572373620a37418f24dc16b5031c39338778c3257e48e8408de9a57291b24f3a");
-    TestPinnedFile(Argv[Argc - 1],
-        "8ea297373e9e5d3600ff41ad9fae88f2d14c98c017d100669f7333981da673b4");
+    if (Argc == 4)
+        /* Ported-card capture: verify the real PROM against this card's pin. */
+        TestPinnedFile(Argv[2], Argv[3]);
+    else
+        TestPinnedFile(Argv[Argc - 1],
+            "8ea297373e9e5d3600ff41ad9fae88f2d14c98c017d100669f7333981da673b4");
     printf("SHA-256: %u checks, %u failures\n", Checks, Failures);
     return Failures != 0;
 }

@@ -1023,7 +1023,7 @@ static int unlock_transaction_fwsec(struct unlock_transaction_work *work)
 	size_t mapped = 0;
 	u8 *rom = NULL;
 	struct gpu_unlock_fwsec fw;
-	u32 fuse_raw, version, scratch, wpr_lo, wpr_hi;
+	u32 fuse_raw, version, scratch, wpr_lo, wpr_hi, dmem_transfer;
 	u16 command;
 	u64 frts = work->layout.frts_offset;
 	void *image = NULL;
@@ -1052,6 +1052,15 @@ static int unlock_transaction_fwsec(struct unlock_transaction_work *work)
 		ret = -EOPNOTSUPP;
 		goto out;
 	}
+	/* Official s_dmaTransfer_GA102 loops in 256-byte blocks, rounding up
+	 * the last transfer. Laptop FWSEC images may declare a non-multiple
+	 * DMEM size (e.g. 0x980 -> 0xa00); verify the image padding covers it
+	 * instead of reading beyond the image. GA107 0.1.1 incident fix. */
+	ret = gpu_unlock_fwsec_dmem_transfer(&fw, &dmem_transfer);
+	if (ret)
+		goto out;
+	dev_info(&work->pdev->dev, "FWSEC DMEM: declared=%#x transfer=%#x image=%#x data_offset=%#x\n",
+		 fw.dmem_size, dmem_transfer, fw.image_size, fw.data_off);
 	image = diag_dma_alloc(work, "fwsec", fw.image_size, &image_dma, GFP_KERNEL);
 	if (!image) {
 		ret = -ENOMEM;
@@ -1104,7 +1113,7 @@ static int unlock_transaction_fwsec(struct unlock_transaction_work *work)
 	GuStarted();
 #endif
 	ret = falcon_hs(work, &gsp, 0, fw.imem_size, fw.imem_va, fw.imem_pa,
-			fw.data_off, fw.dmem_size, fw.dmem_pa, fw.pkc_off,
+			fw.data_off, dmem_transfer, fw.dmem_pa, fw.pkc_off,
 			fw.engine_mask, fw.ucode_id,
 			image_dma, 0, 0, false);
 	if (ret)
