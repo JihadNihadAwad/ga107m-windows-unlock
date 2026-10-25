@@ -61,8 +61,9 @@ issue rate reads locked (512-class) by the time CUDA runs in Windows.
 
    **RESULT (2026-10-25, RUN04 + hold): CONFIRMED.**
    FP16 987 / BF16 962 ops/SM/clk (1024-class) vs 513/507 locked.
-   TF32 unchanged at 250 (SS1 preserved by the SS0-only policy - the
-   opt-in SS1 experiment would target 512). FP16 reached 25.77 TFLOPS at
+   TF32 unchanged at 250 with the SS0-only policy (SS1 preserved); the
+   SS1=0x8 opt-in was later hardware-verified in RUN05: TF32 503
+   ops/SM/clk with FP16/BF16 unaffected. FP16 reached 25.77 TFLOPS at
    1305 MHz / ~48.5 W vs 16.67 TFLOPS at 1657 MHz / ~59 W locked: with
    double the issue rate the governor settles at a lower clock for the
    same work - ~55% more throughput at ~20% less power.

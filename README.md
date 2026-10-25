@@ -13,14 +13,18 @@ twice from UEFI before the Windows driver bound — FWSEC clean, V67 staged,
 `SS0=0x88888888` written and verified pre- and post-FLR, clean handoff — and
 with the dGPU kept out of runtime D3cold, Windows measured:
 
-| 8192³ GEMM (clock-normalized) | Locked | Unlocked |
-|---|---|---|
-| FP16 in / FP32 acc | 513 ops/SM/clk (16.7 TFLOPS @ 1657 MHz, 59 W) | **987 ops/SM/clk (25.8 TFLOPS @ 1305 MHz, 48.5 W)** |
-| BF16 in / FP32 acc | 507 ops/SM/clk | **962 ops/SM/clk** |
-| TF32 in / FP32 acc | 252 ops/SM/clk | unchanged (SS1 preserved by default policy) |
+| 8192³ GEMM (clock-normalized) | Locked | Unlocked (SS0-only) | Unlocked (SS0+SS1) |
+|---|---|---|---|
+| FP16 in / FP32 acc | 513 ops/SM/clk (16.7 TFLOPS @ 1657 MHz, 59 W) | **987 ops/SM/clk (25.8 TFLOPS @ 1305 MHz, 48.5 W)** | **969 ops/SM/clk (25.4 TFLOPS)** |
+| BF16 in / FP32 acc | 507 ops/SM/clk | **962 ops/SM/clk** | **984 ops/SM/clk (26.3 TFLOPS)** |
+| TF32 in / FP32 acc | 252 ops/SM/clk | unchanged (SS1 preserved) | **503 ops/SM/clk (13.1 TFLOPS)** |
+| FP32 pedantic | ~170 ops/SM/clk | unchanged | unchanged |
 
-~55% more measured TFLOPS at ~20% lower power for FP16 GEMM. TF32 doubling is
-an explicit opt-in (`entryLatchedSs1Full`), unverified on this card.
+~55% more measured TFLOPS at ~20% lower power for FP16 GEMM. The SS1=0x8
+opt-in (`entryLatchedSs1Full`) additionally doubles TF32 (256 → 503
+ops/SM/clk) and is **hardware-verified on this card**: RUN05 wrote
+SS0=0x88888888 + SS1=0x8, both verified pre- and post-FLR, clean handoff.
+FP16/BF16 are unaffected by SS1, matching the LG GA107 measurements.
 
 **Persistence is not automatic on a laptop.** Windows runtime-D3cold
 power-gates the idle dGPU, and the card's fuse-based init re-programs the

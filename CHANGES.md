@@ -1,5 +1,18 @@
 # Changes
 
+## 2026-10-25 — RUN05: SS1=0x8 TF32 doubling verified on hardware
+
+- Third clean transaction (RUN05, `entryLatchedSs1Full`): SS0=0x88888888
+  plus the one guarded SS1=0x8 write, both selectors verified pre- and
+  post-FLR, `transaction result=0 clean=1`.
+- TF32 measured 503 ops/SM/clk (13.1 TFLOPS) vs 250-252 locked — the
+  2x TF32 issue-rate holds on GA107M, matching the LG result. FP16/BF16
+  unaffected by SS1 (969/984 ops/SM/clk, within run-to-run variance of
+  the SS0-only measurements). FP32 pedantic unchanged as expected.
+- README and docs/GA107M.en.md result tables extended with the
+  SS0+SS1 column; the variant is now hardware-verified rather than an
+  open experiment. SS0-only remains the default policy build.
+
 ## 2026-10-25 — RUN03/RUN04: successful hardware transactions; persistence solved
 
 - RUN03/RUN04: the full transaction executed on live GA107M silicon —
