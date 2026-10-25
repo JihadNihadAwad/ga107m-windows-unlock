@@ -6,7 +6,7 @@ Experimental UEFI unlock and direct Windows handoff for one documented
 **HP RTX 3050 Ti Laptop GPU (GA107M)** system, plus a **read-only preflight**
 and a **decode probe** for collecting the values needed to pin your own card.
 Source-only, as upstream: no firmware assets or built EFI binaries are
-bundled.
+bundled. You should compile them on your own machine just in case.
 
 **Hardware result (this machine, 2026-10-25):** the full transaction executed
 twice from UEFI before the Windows driver bound — FWSEC clean, V67 staged,
@@ -29,10 +29,15 @@ survives exactly as long as the dGPU never enters D3cold; `hold_gpu_windowed.py`
 keeps a live CUDA context for that. See
 [docs/GA107M-PERSISTENCE.en.md](docs/GA107M-PERSISTENCE.en.md).
 
-One machine, one card, evidence first. Nothing here authorizes running this
-on any other laptop. Read [docs/GA107M.en.md](docs/GA107M.en.md) (the port's
+This is only verified on my own laptop, with two GPUs, with my specific firmware and card. Do not attempt to run this on any other laptop without at least checking the pre-flights and ensuring it won't break anything. Read [docs/GA107M.en.md](docs/GA107M.en.md) (the port's
 phase-by-phase workflow) and upstream's [compatibility](docs/COMPATIBILITY.en.md)
 notes first.
+
+This was done because I wanted to experiment with it and see if it can speed up some operations for tinier ML tasks. This isn't useful for every AI task, so depending on your needs it's a waste of time, but development and fine-tuning and image-gen benefit to a degree when not bottlenecked by other things. This might also be patched in the future by some drivers as with some things in the past.
+
+If you want to try it on your own machine, I recommend using AI agents to go through and understand and experiment at first, without writes (hence the pre-flights), but it's best that you know what you're doing to a degree and understand how Optimus works on laptops and what things might get in the way and whether the card is fully cold before boot and so on. It's less risky if you do this on Linux and try the method in other repos, as they also handle the persistence better without needing to keep the card active the same way, and without UEFI and boot voodoo. The risk itself is low since it's wiped out every time the GPU is turned off and restarted in many cases, so long as you're not messing with the wrong things.
+
+**One more note:** Power consumption seems to be down by 25-50% in many cases. Verified by starting windows with the change, then letting the GPU reset by not holding the card, then trying after. Instance -> Gaming (shader-bound, 65% util, 1950Mhz): FPS unchanged, power −25% (40→30 W) in one A/B session — not a verified claim and I won't go through more things, but consistent with the governor observations in the GEMM data. The power draw even with FPS limits was also lower. This could be some measurement window variance or some threshold being crossed somewhere else, but I'm using a more stable voltage curve than stock, so it might be that it can just draw less in some specific cases, with util, clock speed and FPS being exact otherwise.
 
 ## What is in this fork
 
