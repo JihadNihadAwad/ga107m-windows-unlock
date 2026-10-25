@@ -2,6 +2,24 @@
 
 **English** | [한국어](BUILD.ko.md)
 
+> **GA107M fork builds:** this fork's three build modes are driven by
+> `unlock/build-wsl.sh` (cross-build from WSL with clang/lld-link — no
+> Windows LLVM install needed) or the upstream `unlock/build.ps1` with
+> LLVM on Windows:
+>
+> | Mode | Command (build-wsl.sh) | Artifact |
+> |---|---|---|
+> | Preflight (read-only) | `bash build-wsl.sh` | `build/GA107M-PREFLIGHT.EFI` |
+> | Decode probe | `bash build-wsl.sh --probe` | `build/probe/GA107M-PROBE.EFI` |
+> | Experimental (SS0-only) | `bash build-wsl.sh --experimental entryLatchedSs1Preserve` | `build/experimental/entryLatchedSs1Preserve/GA107M-EXPERIMENTAL-entryLatchedSs1Preserve.EFI` |
+>
+> The experimental build fails closed (`#error`) until the exact-card
+> profile is transcribed into `unlock/port.h` from that card's own probe
+> report. The fork's host tests run without Windows LLVM via
+> `run-cross-tests.sh` (WSL build) + `run-cross-tests.ps1` (Windows
+> execution); see [GA107M.en.md](GA107M.en.md). The upstream 3090 notes
+> below are preserved unchanged.
+
 Python 3.9+, LLVM/clang and lld-link are required. The successful-case EFI was built with **clang 20.1.8**. The default build is a read-only preflight and cannot run the unlock. It still contains exact-machine checks; it is not a generic hardware probe.
 
 To build the experimental profile for the verified system:
