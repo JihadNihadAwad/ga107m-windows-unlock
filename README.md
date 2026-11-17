@@ -2,6 +2,8 @@
 
 **English only** | Upstream: [impacifist/Windows-GPU-UNLOCK](https://github.com/impacifist/Windows-GPU-UNLOCK) (RTX 3090 FE) — this repository is a fork carrying a port to a laptop GPU.
 
+You may also check this fork if you run into trouble I didn't have, as it may have other solutions: [mrslezak/ga107m-windows-unlock](https://github.com/mrslezak/ga107m-windows-unlock)
+
 Experimental UEFI unlock and direct Windows handoff for one documented
 **HP RTX 3050 Ti Laptop GPU (GA107M)** system, plus a **read-only preflight**
 and a **decode probe** for collecting the values needed to pin your own card.
